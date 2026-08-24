@@ -1,0 +1,89 @@
+#!/bin/bash
+set -e
+
+echo
+echo "🐶 Installation de Upeelechien 5.6"
+echo "================================"
+echo
+
+# ============================================================
+# 1. Vérifier Ollama
+# ============================================================
+
+if command -v ollama >/dev/null 2>&1; then
+    echo "✅ Ollama est déjà installé."
+    echo "   Version : $(ollama --version 2>/dev/null || echo "inconnue")"
+else
+    echo "📦 Ollama n'est pas installé."
+    echo "⬇️ Installation d'Ollama..."
+
+    curl -fsSL https://ollama.com/install.sh | sh
+fi
+
+# ============================================================
+# 2. Démarrer Ollama
+# ============================================================
+
+if command -v systemctl >/dev/null 2>&1; then
+    echo "⚙️ Vérification du service Ollama..."
+
+    sudo systemctl enable --now ollama 2>/dev/null || true
+fi
+
+# ============================================================
+# 3. Attendre l'API Ollama
+# ============================================================
+
+echo "⏳ Attente du démarrage d'Ollama..."
+
+for i in {1..30}; do
+    if curl -sf http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+        echo "✅ Ollama est prêt."
+        break
+    fi
+
+    sleep 1
+done
+
+# ============================================================
+# 4. Vérifier Qwen3 1.7B
+# ============================================================
+
+if ollama list 2>/dev/null | awk '{print $1}' | grep -qx 'qwen3:1.7b'; then
+    echo "✅ Qwen3 1.7B est déjà installé."
+else
+    echo "🧠 Qwen3 1.7B n'est pas installé."
+    echo "⬇️ Téléchargement..."
+
+    ollama pull qwen3:1.7b
+fi
+
+# ============================================================
+# 5. Vérifier Upeelechien
+# ============================================================
+
+if ollama list 2>/dev/null | awk '{print $1}' | grep -qx 'upeelechien-5-6'; then
+    echo "✅ Upeelechien 5.6 est déjà créé."
+else
+    echo "🐶 Création du modèle Upeelechien..."
+
+    if [ -f /usr/share/upeelechien/Modelfile ]; then
+        ollama create upeelechien-5-6 \
+            -f /usr/share/upeelechien/Modelfile
+    else
+        echo "⚠️ Modelfile introuvable."
+        echo "   /usr/share/upeelechien/Modelfile"
+    fi
+fi
+
+echo
+echo "================================"
+echo "✅ Upeelechien 5.6 est installé !"
+echo "================================"
+echo
+echo "Lance avec :"
+echo
+echo "    upeelechien"
+echo
+
+exit 0

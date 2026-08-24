@@ -1,0 +1,11 @@
+*.deb
+*.buildinfo
+*.changes
+*.dsc
+*.tar.xz
+
+debian/upeelechien/
+
+.DS_Store
+*.swp
+*~

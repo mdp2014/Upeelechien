@@ -1,0 +1,17 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_install:
+	mkdir -p debian/upeelechien/usr/bin
+	install -m 755 ia.sh debian/upeelechien/usr/bin/upeelechien
+
+	mkdir -p debian/upeelechien/usr/share/upeelechien
+	install -m 644 Modelfile debian/upeelechien/usr/share/upeelechien/Modelfile
+
+	mkdir -p debian/upeelechien/usr/share/icons/hicolor/512x512/apps
+	install -m 644 logo.png debian/upeelechien/usr/share/icons/hicolor/512x512/apps/upeelechien.png
+
+	mkdir -p debian/upeelechien/usr/share/applications
+	install -m 644 upeelechien.desktop debian/upeelechien/usr/share/applications/upeelechien.desktop

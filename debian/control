@@ -1,0 +1,13 @@
+Source: upeelechien
+Section: misc
+Priority: optional
+Maintainer: Marin <marin.depibrac@gmail.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+
+Package: upeelechien
+Architecture: amd64
+Depends: bash, curl
+Description: Upeelechien 5.6
+ Upeelechien 5.6 est une IA française locale développée par Marin.
+ Elle utilise upeelechien 5-6 et elle est entierement grauite.

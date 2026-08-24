@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Upeelechien 5.6
+Comment=IA française locale développée par Marin
+Exec=upeelechien
+Icon=upeelechien
+Terminal=true
+Type=Application
+Categories=Utility;ArtificialIntelligence;
+StartupNotify=true
