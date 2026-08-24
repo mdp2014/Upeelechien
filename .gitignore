@@ -9,3 +9,9 @@ debian/upeelechien/
 .DS_Store
 *.swp
 *~
+
+# Fichiers générés par Debian
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/files
+debian/*.substvars
