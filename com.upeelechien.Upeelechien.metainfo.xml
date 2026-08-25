@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+
+  <id>com.upeelechien.Upeelechien</id>
+
+  <name>Upeelechien</name>
+  <name xml:lang="fr">Upeelechien</name>
+
+  <summary>IA française locale pour Linux</summary>
+  <summary xml:lang="fr">IA française locale pour Linux</summary>
+
+  <description>
+    <p>
+      Upeelechien est une intelligence artificielle française locale
+      développée par Marin.
+    </p>
+    <p>
+      Upeelechien utilise Qwen3 1.7B avec Ollama afin de permettre
+      l'utilisation d'une IA directement sur votre ordinateur.
+    </p>
+    <p>
+      Upeelechien fonctionne sans compte et propose une expérience
+      simple depuis le bureau Linux.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">upeelechien.desktop</launchable>
+
+  <provides>
+    <binary>upeelechien</binary>
+  </provides>
+
+  <categories>
+    <category>Utility</category>
+    <category>Education</category>
+  </categories>
+
+  <keywords>
+    <keyword>IA</keyword>
+    <keyword>AI</keyword>
+    <keyword>Assistant</keyword>
+    <keyword>Chat</keyword>
+    <keyword>Qwen</keyword>
+    <keyword>Ollama</keyword>
+  </keywords>
+
+  <developer id="marin">
+    <name>Marin</name>
+  </developer>
+
+  <content_rating type="oars-1.1"/>
+
+  <url type="homepage">https://github.com/mdp2014/Upeelechien</url>
+  <url type="bugtracker">https://github.com/mdp2014/Upeelechien/issues</url>
+
+</component>

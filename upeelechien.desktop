@@ -1,9 +1,14 @@
 [Desktop Entry]
-Name=Upeelechien 5.6
-Comment=IA française locale développée par Marin
+Name=Upeelechien
+Name[fr]=Upeelechien
+Comment=IA française locale pour Linux
+Comment[fr]=IA française locale pour Linux
+GenericName=Intelligence artificielle
+GenericName[fr]=Intelligence artificielle
 Exec=upeelechien
 Icon=upeelechien
 Terminal=true
 Type=Application
-Categories=Utility;ArtificialIntelligence;
+Categories=Utility;Education;
+Keywords=IA;AI;Chat;Qwen;Ollama;Assistant;
 StartupNotify=true
