@@ -1,0 +1,24 @@
+app-id: io.github.mdp2014.Upeelechien
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+command: upeelechien
+
+finish-args:
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+
+modules:
+  - name: upeelechien
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 upeelechien.py /app/bin/upeelechien
+      - install -Dm644 Modelfile /app/share/upeelechien/Modelfile
+      - install -Dm644 com.upeelechien.Upeelechien.metainfo.xml /app/share/metainfo/io.github.mdp2014.Upeelechien.metainfo.xml
+      - install -Dm644 upeelechien.desktop /app/share/applications/io.github.mdp2014.Upeelechien.desktop
+      - install -Dm644 logo-flatpak.png /app/share/icons/hicolor/512x512/apps/io.github.mdp2014.Upeelechien.png
+    sources:
+      - type: dir
+        path: ..

@@ -15,3 +15,8 @@ debian/.debhelper/
 debian/debhelper-build-stamp
 debian/files
 debian/*.substvars
+
+# Fichiers générés par Flatpak
+.flatpak-builder/
+build-dir/
+repo/

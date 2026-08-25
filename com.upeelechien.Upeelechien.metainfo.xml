@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
 
-  <id>com.github.mdp2014.Upeelechien</id>
+  <id>io.github.mdp2014.Upeelechien</id>
 
   <name>Upeelechien</name>
   <name xml:lang="fr">Upeelechien</name>
@@ -35,7 +35,7 @@
     </p>
   </description>
 
-  <launchable type="desktop-id">upeelechien.desktop</launchable>
+  <launchable type="desktop-id">io.github.mdp2014.Upeelechien.desktop</launchable>
 
   <provides>
     <binary>upeelechien</binary>

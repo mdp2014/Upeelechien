@@ -288,4 +288,4 @@ echo "║                                              ║"
 echo "╚══════════════════════════════════════════════╝"
 echo
 
-ollama run "$OLLAMA_MODEL" --think=false
+ollama run "upeelechien-2" --think=false
