@@ -12,17 +12,20 @@ echo
 
 ./nouvelle-version.sh
 
-VERSION=$(sed -n '1s/^upeelechien (\([^)]*\)).*/\1/p' debian/changelog)
+VERSION=$(dpkg-parsechangelog -S Version 2>/dev/null || true)
 
 if [ -z "$VERSION" ]; then
-    echo "❌ Impossible de récupérer la version."
+    echo "❌ Impossible de déterminer la version."
     exit 1
 fi
 
-echo
 echo "📦 Version : $VERSION"
 echo
 
+echo "🔎 Validation AppStream..."
+appstreamcli validate com.upeelechien.Upeelechien.metainfo.xml
+
+echo
 echo "🧹 Nettoyage..."
 rm -rf debian/upeelechien
 rm -f ../upeelechien_*.deb
@@ -37,10 +40,20 @@ echo
 
 dpkg-buildpackage -us -uc
 
+DEB="../upeelechien_${VERSION}_amd64.deb"
+
+echo
+echo "🔎 Vérification du paquet..."
+dpkg-deb --info "$DEB" | grep -E 'Package|Version|Architecture'
+
+echo
+echo "📂 Vérification des fichiers..."
+dpkg-deb -c "$DEB" | grep -E \
+'usr/bin/upeelechien|applications/upeelechien.desktop|metainfo/|icons/|Modelfile'
+
 echo
 echo "========================================"
 echo "✅ BUILD TERMINÉ"
 echo "========================================"
 echo
-
-ls -lh "../upeelechien_${VERSION}"*.deb
+ls -lh "$DEB"

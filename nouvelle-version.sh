@@ -1,48 +1,37 @@
 #!/bin/bash
-
 set -e
 
+VERSION_FILE="VERSION"
 CHANGELOG="debian/changelog"
 
-if [ ! -f "$CHANGELOG" ]; then
-    echo "❌ debian/changelog introuvable."
-    exit 1
+if [ ! -f "$VERSION_FILE" ]; then
+    echo "2.0" > "$VERSION_FILE"
+    echo "📦 Version initialisée : 2.0"
+else
+    CURRENT=$(tr -d '[:space:]' < "$VERSION_FILE")
+
+    if [[ "$CURRENT" == "1."* ]]; then
+        NEW_VERSION="2.0"
+    elif [[ "$CURRENT" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
+        MAJOR="${BASH_REMATCH[1]}"
+        MINOR="${BASH_REMATCH[2]}"
+        NEW_VERSION="$MAJOR.$((MINOR + 1))"
+    else
+        echo "❌ Version invalide : $CURRENT"
+        exit 1
+    fi
+
+    echo "$NEW_VERSION" > "$VERSION_FILE"
+    echo "🐶 Version actuelle : $CURRENT"
+    echo "🚀 Nouvelle version : $NEW_VERSION"
+    echo "✅ Version mise à jour : $NEW_VERSION"
 fi
 
-# Récupérer la dernière version
-VERSION=$(sed -n '1s/^upeelechien (\([^)]*\)).*/\1/p' "$CHANGELOG")
+VERSION=$(tr -d '[:space:]' < "$VERSION_FILE")
 
-if [ -z "$VERSION" ]; then
-    echo "❌ Impossible de trouver la version."
-    exit 1
+# Synchronisation automatique du changelog Debian
+if [ -f "$CHANGELOG" ]; then
+    sed -i -E "1s/^upeelechien \([^)]*\)/upeelechien ($VERSION)/" "$CHANGELOG"
 fi
 
-# Séparer majeure et mineure
-MAJOR="${VERSION%%.*}"
-MINOR="${VERSION##*.}"
-
-# Incrémenter la version mineure
-NEW_MINOR=$((MINOR + 1))
-NEW_VERSION="${MAJOR}.${NEW_MINOR}"
-
-echo "🐶 Version actuelle : $VERSION"
-echo "🚀 Nouvelle version : $NEW_VERSION"
-
-DATE=$(date -R)
-
-TMP=$(mktemp)
-
-{
-    echo "upeelechien (${NEW_VERSION}) unstable; urgency=medium"
-    echo
-    echo "  * Nouvelle version de Upeelechien."
-    echo
-    echo " -- Marin <marin.depibrac@gmail.com>  $DATE"
-    echo
-    cat "$CHANGELOG"
-} > "$TMP"
-
-mv "$TMP" "$CHANGELOG"
-
-echo
-echo "✅ Version mise à jour : $NEW_VERSION"
+echo "📦 Version : $VERSION"
