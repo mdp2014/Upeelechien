@@ -60,4 +60,20 @@
   <url type="bugtracker">https://github.com/mdp2014/Upeelechien/issues</url>
   <url type="vcs-browser">https://github.com/mdp2014/Upeelechien</url>
 
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Interface principale d'Upeelechien</caption>
+      <image>https://raw.githubusercontent.com/mdp2014/Upeelechien/main/screenshots/interface-principale.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Interface de discussion avec l'intelligence artificielle</caption>
+      <image>https://raw.githubusercontent.com/mdp2014/Upeelechien/main/screenshots/interface-chat.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Upeelechien sur le bureau Linux</caption>
+      <image>https://raw.githubusercontent.com/mdp2014/Upeelechien/main/screenshots/upeelechien.png</image>
+    </screenshot>
+  </screenshots>
+
 </component>
