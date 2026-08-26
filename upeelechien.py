@@ -1,17 +1,199 @@
 #!/usr/bin/env python3
 
 import json
+import os
+import shutil
+import subprocess
+import sys
 import threading
-import urllib.request
 import urllib.error
+import urllib.request
 
 import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gtk, GLib
 
 
-OLLAMA_URL = "http://127.0.0.1:11434"
+APP_NAME = "Upeelechien"
+VERSION = "2.4"
 MODEL = "upeelechien-2"
+OLLAMA_URL = "http://127.0.0.1:11434"
+
+
+def ollama_available():
+    try:
+        with urllib.request.urlopen(
+            f"{OLLAMA_URL}/api/tags",
+            timeout=3
+        ) as response:
+            return response.status == 200
+    except Exception:
+        return False
+
+
+def model_available():
+    try:
+        with urllib.request.urlopen(
+            f"{OLLAMA_URL}/api/tags",
+            timeout=3
+        ) as response:
+            data = json.loads(response.read().decode())
+            return any(
+                model.get("name", "").split(":")[0] == MODEL
+                or model.get("name") == MODEL
+                for model in data.get("models", [])
+            )
+    except Exception:
+        return False
+
+
+def show_help():
+    print(f"""Upeelechien {VERSION}
+
+Utilisation :
+  upeelechien              Lance l'interface graphique
+  upeelechien --help       Affiche cette aide
+  upeelechien --version    Affiche la version
+  upeelechien --status     Vérifie Ollama et le modèle
+  upeelechien --model      Affiche le modèle utilisé
+  upeelechien --remove-model
+                           Supprime le modèle Upeelechien d'Ollama
+  upeelechien --uninstall  Désinstalle Upeelechien
+  upeelechien --purge      Désinstalle Upeelechien et supprime ses données
+
+Modèle :
+  {MODEL}
+
+Serveur Ollama :
+  {OLLAMA_URL}
+""")
+
+
+def show_version():
+    print(f"{APP_NAME} {VERSION}")
+
+
+def show_model():
+    print(f"Modèle : {MODEL}")
+
+
+def show_status():
+    print(f"{APP_NAME} {VERSION}")
+    print()
+
+    if ollama_available():
+        print("✅ Ollama : accessible")
+    else:
+        print("❌ Ollama : inaccessible")
+
+    if model_available():
+        print(f"✅ Modèle : {MODEL}")
+    else:
+        print(f"❌ Modèle : {MODEL} absent")
+
+
+def remove_model():
+    print(f"Suppression du modèle {MODEL}...")
+
+    if not ollama_available():
+        print("❌ Impossible de contacter Ollama.")
+        print("Lancez Ollama avec : ollama serve")
+        return 1
+
+    result = subprocess.run(
+        ["ollama", "rm", MODEL],
+        text=True
+    )
+
+    if result.returncode == 0:
+        print(f"✅ Modèle {MODEL} supprimé.")
+        return 0
+
+    print("❌ Impossible de supprimer le modèle.")
+    return result.returncode
+
+
+def uninstall():
+    print("Désinstallation de Upeelechien")
+    print()
+    print("Cette commande ne supprime pas Ollama.")
+    print("Elle ne supprime pas non plus vos autres modèles.")
+    print()
+
+    answer = input("Confirmer la désinstallation ? [o/N] : ").strip().lower()
+
+    if answer not in ("o", "oui"):
+        print("Annulation.")
+        return 0
+
+    print()
+
+    if shutil.which("apt"):
+        print("Suppression du paquet Debian...")
+        result = subprocess.run(
+            ["sudo", "apt", "remove", "-y", "upeelechien"]
+        )
+
+        if result.returncode == 0:
+            print("✅ Upeelechien a été désinstallé.")
+            return 0
+
+    if shutil.which("flatpak"):
+        print("Suppression du paquet Flatpak...")
+        subprocess.run(
+            ["flatpak", "uninstall", "-y", "io.github.mdp2014.Upeelechien"]
+        )
+
+    print("⚠️ Désinstallation automatique terminée.")
+    print("Si nécessaire, utilisez le gestionnaire de paquets de votre système.")
+
+    return 0
+
+
+def purge():
+    print("SUPPRESSION COMPLÈTE DE UPEELECHIEN")
+    print()
+    print("Cette opération peut supprimer :")
+    print("- l'application Upeelechien")
+    print("- le modèle Ollama upeelechien-2")
+    print("- les données de configuration locales")
+    print()
+    print("Ollama lui-même ne sera PAS supprimé.")
+    print()
+
+    answer = input("Confirmer la suppression complète ? [o/N] : ").strip().lower()
+
+    if answer not in ("o", "oui"):
+        print("Annulation.")
+        return 0
+
+    print()
+    remove_model()
+
+    config_paths = [
+        os.path.expanduser("~/.config/upeelechien"),
+        os.path.expanduser("~/.local/share/upeelechien"),
+        os.path.expanduser("~/.cache/upeelechien"),
+    ]
+
+    for path in config_paths:
+        if os.path.exists(path):
+            shutil.rmtree(path, ignore_errors=True)
+            print(f"🗑️ Supprimé : {path}")
+
+    if shutil.which("apt"):
+        subprocess.run(
+            ["sudo", "apt", "remove", "-y", "upeelechien"]
+        )
+
+    if shutil.which("flatpak"):
+        subprocess.run(
+            ["flatpak", "uninstall", "-y", "io.github.mdp2014.Upeelechien"]
+        )
+
+    print()
+    print("✅ Suppression complète terminée.")
+    return 0
 
 
 class UpeelechienWindow(Gtk.ApplicationWindow):
@@ -22,95 +204,64 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
         self.set_title("Upeelechien")
         self.set_default_size(900, 650)
 
-        main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        main = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=0
+        )
         self.set_child(main)
 
-        # Barre supérieure
         header = Gtk.HeaderBar()
 
         title = Gtk.Label(label="🐶 Upeelechien")
-        title.add_css_class("title")
         header.set_title_widget(title)
-
-        clear_button = Gtk.Button(label="Effacer")
-        clear_button.connect("clicked", self.clear_chat)
-        header.pack_end(clear_button)
 
         main.append(header)
 
-        # Zone de conversation
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_vexpand(True)
-        scrolled.set_hexpand(True)
-
         self.chat = Gtk.TextView()
         self.chat.set_editable(False)
-        self.chat.set_cursor_visible(False)
         self.chat.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        self.chat.set_margin_top(20)
-        self.chat.set_margin_bottom(20)
-        self.chat.set_margin_start(20)
-        self.chat.set_margin_end(20)
 
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_vexpand(True)
         scrolled.set_child(self.chat)
+
         main.append(scrolled)
 
-        # Zone de saisie
         bottom = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=8
         )
-        bottom.set_margin_top(10)
-        bottom.set_margin_bottom(10)
-        bottom.set_margin_start(10)
-        bottom.set_margin_end(10)
+        bottom.set_margin_top(8)
+        bottom.set_margin_bottom(8)
+        bottom.set_margin_start(8)
+        bottom.set_margin_end(8)
 
         self.entry = Gtk.Entry()
-        self.entry.set_placeholder_text("Écrivez votre message…")
+        self.entry.set_placeholder_text("Écrivez votre message...")
         self.entry.set_hexpand(True)
         self.entry.connect("activate", self.send_message)
 
-        send_button = Gtk.Button(label="Envoyer")
-        send_button.add_css_class("suggested-action")
-        send_button.connect("clicked", self.send_message)
+        send = Gtk.Button(label="Envoyer")
+        send.connect("clicked", self.send_message)
 
         bottom.append(self.entry)
-        bottom.append(send_button)
+        bottom.append(send)
 
         main.append(bottom)
 
-        self.status = Gtk.Label(label="Prêt")
-        self.status.set_margin_bottom(8)
-        main.append(self.status)
-
-        self.append_message(
+        self.write_chat(
             "Upeelechien",
-            "Bonjour ! Je suis Upeelechien 5.6. Comment puis-je vous aider ?"
+            "Bonjour ! Je suis Upeelechien 5.6, "
+            "une IA française développée par Marin."
         )
 
-    def append_message(self, author, message):
+    def write_chat(self, speaker, message):
         buffer = self.chat.get_buffer()
-
         end = buffer.get_end_iter()
 
-        if buffer.get_char_count() > 0:
-            buffer.insert(end, "\n\n", -1)
-
-        buffer.insert(end, f"{author} :\n", -1)
-        buffer.insert(end, message, -1)
-
-        GLib.idle_add(self.scroll_to_bottom)
-
-    def scroll_to_bottom(self):
-        adjustment = self.chat.get_parent().get_vadjustment()
-        adjustment.set_value(adjustment.get_upper())
-        return False
-
-    def clear_chat(self, button):
-        self.chat.get_buffer().set_text("")
-        self.append_message(
-            "Upeelechien",
-            "Conversation effacée. Comment puis-je vous aider ?"
+        buffer.insert(
+            end,
+            f"{speaker} :\n{message}\n\n"
         )
 
     def send_message(self, widget):
@@ -120,9 +271,7 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
             return
 
         self.entry.set_text("")
-        self.append_message("Vous", prompt)
-
-        self.status.set_text("Upeelechien réfléchit…")
+        self.write_chat("Vous", prompt)
 
         thread = threading.Thread(
             target=self.ask_ollama,
@@ -132,54 +281,49 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
         thread.start()
 
     def ask_ollama(self, prompt):
-        payload = {
+        payload = json.dumps({
             "model": MODEL,
             "prompt": prompt,
             "stream": False,
             "think": False
-        }
+        }).encode()
+
+        request = urllib.request.Request(
+            f"{OLLAMA_URL}/api/generate",
+            data=payload,
+            headers={
+                "Content-Type": "application/json"
+            }
+        )
 
         try:
-            request = urllib.request.Request(
-                f"{OLLAMA_URL}/api/generate",
-                data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"}
+            with urllib.request.urlopen(
+                request,
+                timeout=120
+            ) as response:
+                data = json.loads(
+                    response.read().decode()
+                )
+
+            answer = data.get(
+                "response",
+                "Aucune réponse."
             )
-
-            with urllib.request.urlopen(request, timeout=300) as response:
-                data = json.loads(response.read().decode("utf-8"))
-
-            answer = data.get("response", "").strip()
-
-            if not answer:
-                answer = "Je n'ai reçu aucune réponse d'Ollama."
-
-            GLib.idle_add(self.show_answer, answer)
 
         except urllib.error.URLError:
-            GLib.idle_add(
-                self.show_error,
-                "Impossible de contacter Ollama."
-            )
+            answer = "Erreur : impossible de contacter Ollama."
 
         except Exception as error:
-            GLib.idle_add(
-                self.show_error,
-                f"Erreur : {error}"
-            )
+            answer = f"Erreur : {error}"
 
-    def show_answer(self, answer):
-        self.append_message("Upeelechien", answer)
-        self.status.set_text("Prêt")
-        return False
-
-    def show_error(self, error):
-        self.append_message("Erreur", error)
-        self.status.set_text("Erreur")
-        return False
+        GLib.idle_add(
+            self.write_chat,
+            "Upeelechien",
+            answer
+        )
 
 
-class UpeelechienApp(Gtk.Application):
+class UpeelechienApplication(Gtk.Application):
 
     def __init__(self):
         super().__init__(
@@ -187,13 +331,39 @@ class UpeelechienApp(Gtk.Application):
         )
 
     def do_activate(self):
-        window = self.props.active_window
-
-        if not window:
-            window = UpeelechienWindow(self)
-
+        window = UpeelechienWindow(self)
         window.present()
 
 
-app = UpeelechienApp()
-app.run()
+def main():
+    if "--help" in sys.argv:
+        show_help()
+        return 0
+
+    if "--version" in sys.argv:
+        show_version()
+        return 0
+
+    if "--status" in sys.argv:
+        show_status()
+        return 0
+
+    if "--model" in sys.argv:
+        show_model()
+        return 0
+
+    if "--remove-model" in sys.argv:
+        return remove_model()
+
+    if "--uninstall" in sys.argv:
+        return uninstall()
+
+    if "--purge" in sys.argv:
+        return purge()
+
+    app = UpeelechienApplication()
+    return app.run(sys.argv)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
