@@ -5,7 +5,7 @@
 
 override_dh_auto_install:
 	mkdir -p debian/upeelechien/usr/bin
-	install -m 755 ia.sh \
+	install -m 755 upeelechien.py \
 		debian/upeelechien/usr/bin/upeelechien
 
 	mkdir -p debian/upeelechien/usr/share/upeelechien
