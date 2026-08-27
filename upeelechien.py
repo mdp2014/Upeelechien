@@ -17,7 +17,7 @@ from gi.repository import Gtk, GLib
 
 
 APP_NAME = "Upeelechien"
-VERSION = "3.1"
+VERSION = "3.4"
 
 MODEL = "upeelechien-5-6"
 QWEN_MODEL = "qwen3:1.7b"
@@ -90,6 +90,7 @@ def start_ollama():
     for _ in range(30):
         if ollama_available():
             return True
+
         time.sleep(1)
 
     return False
@@ -305,7 +306,9 @@ def purge():
         return 0
 
     if ollama_available() and model_available(MODEL):
-        subprocess.run(["ollama", "rm", MODEL])
+        subprocess.run(
+            ["ollama", "rm", MODEL]
+        )
 
     config_paths = [
         os.path.expanduser("~/.config/upeelechien"),
@@ -315,7 +318,10 @@ def purge():
 
     for path in config_paths:
         if os.path.exists(path):
-            shutil.rmtree(path, ignore_errors=True)
+            shutil.rmtree(
+                path,
+                ignore_errors=True
+            )
             print(f"🗑️ Supprimé : {path}")
 
     if shutil.which("apt"):
@@ -335,6 +341,7 @@ def purge():
 
     print()
     print("✅ Suppression complète terminée.")
+
     return 0
 
 
@@ -354,16 +361,22 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
             orientation=Gtk.Orientation.VERTICAL
         )
 
+        self.main.add_css_class("app-background")
+
         self.set_child(self.main)
 
-        self.loading_value = 0
-        self.loading_target = 0
-        self.loading_timer = None
+        self.progress_value = 0.0
+        self.progress_target = 0.0
+        self.progress_timer = None
+
+        self.loading_animation_timer = None
+        self.loading_phase = 0
 
         self.typing_timer = None
-        self.typing_row = None
-        self.typing_label = None
         self.typing_dots = 0
+
+        self.response_buffer = ""
+        self.current_ai_label = None
 
         self.install_css()
         self.show_loading_page()
@@ -378,31 +391,61 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
         css = Gtk.CssProvider()
 
         css.load_from_data(b"""
-        .loading-page {
+        .app-background {
+            background: #202124;
+        }
+
+        .loading-background {
             background: #202124;
         }
 
         .loading-title {
             color: #ffffff;
+            font-size: 28px;
             font-weight: bold;
         }
 
         .loading-subtitle {
-            color: #dddddd;
+            color: #d0d0d0;
+            font-size: 15px;
         }
 
         .loading-status {
             color: #ffffff;
-            font-weight: bold;
+            font-size: 16px;
         }
 
         .loading-detail {
-            color: #bbbbbb;
+            color: #bdbdbd;
+            font-size: 14px;
         }
 
-        .chat-area {
-            background: #f5f5f7;
-            padding: 12px;
+        .loader {
+            color: #22a447;
+            font-size: 18px;
+        }
+
+        progressbar {
+            min-height: 8px;
+        }
+
+        progressbar trough {
+            background: #3a3a3a;
+            border-radius: 8px;
+        }
+
+        progressbar progress {
+            background: #22a447;
+            border-radius: 8px;
+        }
+
+        .chat-background {
+            background: #202124;
+        }
+
+        .messages-area {
+            background: #202124;
+            padding: 14px;
         }
 
         .bubble {
@@ -412,7 +455,7 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
         }
 
         .user-bubble {
-            background: #007aff;
+            background: #087cf5;
             color: #ffffff;
         }
 
@@ -421,14 +464,9 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
             color: #ffffff;
         }
 
-        .bubble-user-name {
-            color: #ffffff;
+        .bubble-name {
             font-weight: bold;
-        }
-
-        .bubble-assistant-name {
             color: #ffffff;
-            font-weight: bold;
         }
 
         .message-text {
@@ -440,35 +478,45 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
             color: #ffffff;
             padding: 10px 14px;
             border-radius: 18px;
+            margin: 4px;
         }
 
         .typing-text {
             color: #ffffff;
         }
 
-        .send-button {
-            padding: 8px 18px;
-            border-radius: 14px;
+        .input-area {
+            background: #202124;
+            padding: 8px;
         }
 
         entry {
+            background: #292a2d;
+            color: #ffffff;
             border-radius: 20px;
             padding: 10px 14px;
+            border: 1px solid #444444;
+        }
+
+        entry:focus {
+            border: 1px solid #22a447;
+        }
+
+        .send-button {
+            padding: 10px 20px;
+            border-radius: 18px;
         }
         """)
 
-        display = self.get_display()
-
-        if display is not None:
-            Gtk.StyleContext.add_provider_for_display(
-                display,
-                css,
-                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-            )
+        Gtk.StyleContext.add_provider_for_display(
+            self.get_display(),
+            css,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
 
 
     # ========================================================
-    # PAGE DE CHARGEMENT
+    # PAGE INSTALLATION
     # ========================================================
 
     def show_loading_page(self):
@@ -478,39 +526,34 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
                 self.main.get_first_child()
             )
 
-        box = Gtk.Box(
+        page = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
-            spacing=18
+            spacing=16
         )
 
-        box.add_css_class("loading-page")
-        box.set_halign(Gtk.Align.FILL)
-        box.set_valign(Gtk.Align.FILL)
-        box.set_hexpand(True)
-        box.set_vexpand(True)
+        page.add_css_class("loading-background")
 
-        content = Gtk.Box(
+        page.set_halign(Gtk.Align.FILL)
+        page.set_valign(Gtk.Align.FILL)
+        page.set_vexpand(True)
+
+        center = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
-            spacing=18
+            spacing=14
         )
 
-        content.set_halign(Gtk.Align.CENTER)
-        content.set_valign(Gtk.Align.CENTER)
+        center.set_halign(Gtk.Align.CENTER)
+        center.set_valign(Gtk.Align.CENTER)
 
         logo = Gtk.Label(label="🐶")
         logo.set_markup(
-            '<span size="60000">🐶</span>'
+            '<span size="70000">🐶</span>'
         )
 
         title = Gtk.Label(
             label="Upeelechien 5.6"
         )
         title.add_css_class("loading-title")
-        title.set_markup(
-            '<span size="26000" weight="bold">'
-            'Upeelechien 5.6'
-            '</span>'
-        )
 
         subtitle = Gtk.Label(
             label="Préparation de votre assistant local..."
@@ -520,45 +563,46 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
         self.status_label = Gtk.Label(
             label="Initialisation..."
         )
-        self.status_label.add_css_class(
-            "loading-status"
+        self.status_label.add_css_class("loading-status")
+
+        self.loading_spinner = Gtk.Spinner()
+        self.loading_spinner.add_css_class("loader")
+        self.loading_spinner.set_spinning(True)
+
+        self.loading_animation_label = Gtk.Label(
+            label="●"
         )
+        self.loading_animation_label.add_css_class("loader")
 
         self.progress = Gtk.ProgressBar()
         self.progress.set_fraction(0.0)
         self.progress.set_show_text(True)
         self.progress.set_text("0 %")
-        self.progress.set_size_request(450, -1)
+        self.progress.set_size_request(420, -1)
 
         self.loading_detail = Gtk.Label(
             label="Cette opération peut prendre plusieurs minutes."
         )
-        self.loading_detail.add_css_class(
-            "loading-detail"
-        )
+        self.loading_detail.add_css_class("loading-detail")
         self.loading_detail.set_wrap(True)
         self.loading_detail.set_justify(
             Gtk.Justification.CENTER
         )
 
-        content.append(logo)
-        content.append(title)
-        content.append(subtitle)
-        content.append(self.status_label)
-        content.append(self.progress)
-        content.append(self.loading_detail)
+        center.append(logo)
+        center.append(title)
+        center.append(subtitle)
+        center.append(self.loading_spinner)
+        center.append(self.loading_animation_label)
+        center.append(self.status_label)
+        center.append(self.progress)
+        center.append(self.loading_detail)
 
-        box.append(content)
+        page.append(center)
 
-        self.main.append(box)
+        self.main.append(page)
 
-        self.loading_value = 0
-        self.loading_target = 0
-
-        self.loading_timer = GLib.timeout_add(
-            30,
-            self.animate_loading
-        )
+        self.start_loading_animation()
 
         threading.Thread(
             target=self.installation_thread,
@@ -566,27 +610,45 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
         ).start()
 
 
+    def start_loading_animation(self):
+
+        self.loading_phase = 0
+
+        if self.loading_animation_timer:
+            GLib.source_remove(
+                self.loading_animation_timer
+            )
+
+        self.loading_animation_timer = GLib.timeout_add(
+            350,
+            self.animate_loading
+        )
+
+
     def animate_loading(self):
 
-        if not hasattr(self, "progress"):
+        if not hasattr(
+            self,
+            "loading_animation_label"
+        ):
             return False
 
-        if self.loading_value < self.loading_target:
-            self.loading_value += 0.35
+        self.loading_phase = (
+            self.loading_phase + 1
+        ) % 4
 
-            if self.loading_value > self.loading_target:
-                self.loading_value = self.loading_target
+        dots = "." * self.loading_phase
 
-            self.progress.set_fraction(
-                self.loading_value / 100
-            )
-
-            self.progress.set_text(
-                f"{int(self.loading_value)} %"
-            )
+        self.loading_animation_label.set_text(
+            f"●{dots}"
+        )
 
         return True
 
+
+    # ========================================================
+    # PROGRESSION FLUIDE
+    # ========================================================
 
     def update_loading(
         self,
@@ -597,7 +659,7 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
 
         def update():
 
-            self.loading_target = percent
+            self.progress_target = float(percent)
 
             self.status_label.set_text(
                 status
@@ -607,9 +669,56 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
                 detail
             )
 
+            if self.progress_timer is None:
+
+                self.progress_timer = GLib.timeout_add(
+                    25,
+                    self.animate_progress
+                )
+
             return False
 
         GLib.idle_add(update)
+
+
+    def animate_progress(self):
+
+        difference = (
+            self.progress_target
+            - self.progress_value
+        )
+
+        if abs(difference) < 0.15:
+
+            self.progress_value = (
+                self.progress_target
+            )
+
+            self.progress.set_fraction(
+                self.progress_value / 100
+            )
+
+            self.progress.set_text(
+                f"{int(self.progress_value)} %"
+            )
+
+            self.progress_timer = None
+
+            return False
+
+        self.progress_value += (
+            difference * 0.08
+        )
+
+        self.progress.set_fraction(
+            self.progress_value / 100
+        )
+
+        self.progress.set_text(
+            f"{int(self.progress_value)} %"
+        )
+
+        return True
 
 
     # ========================================================
@@ -624,7 +733,7 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
             "Recherche du moteur local..."
         )
 
-        time.sleep(0.5)
+        time.sleep(1)
 
         if not ollama_installed():
 
@@ -635,45 +744,53 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
             )
 
             if not install_ollama():
+
                 self.installation_error(
                     "Impossible d'installer Ollama."
                 )
+
                 return
 
         self.update_loading(
-            30,
+            28,
             "Démarrage d'Ollama",
             "Démarrage du serveur local..."
         )
 
         if not start_ollama():
+
             self.installation_error(
                 "Impossible de démarrer Ollama."
             )
+
             return
 
         self.update_loading(
-            42,
-            "Vérification de Qwen3",
+            40,
+            "Vérification de Qwen",
             f"Recherche de {QWEN_MODEL}..."
         )
+
+        time.sleep(1)
 
         if not model_available(QWEN_MODEL):
 
             self.update_loading(
-                50,
-                "Téléchargement de Qwen3",
+                55,
+                "Téléchargement de Qwen",
                 f"Téléchargement de {QWEN_MODEL}..."
             )
 
             if not pull_qwen():
+
                 self.installation_error(
-                    "Impossible de télécharger Qwen3 1.7B."
+                    "Impossible de télécharger Qwen 1.7B."
                 )
+
                 return
 
         self.update_loading(
-            78,
+            75,
             "Création de Upeelechien",
             "Application du Modelfile..."
         )
@@ -681,9 +798,11 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
         if not model_available(MODEL):
 
             if not create_upeelechien_model():
+
                 self.installation_error(
                     "Impossible de créer le modèle Upeelechien."
                 )
+
                 return
 
         self.update_loading(
@@ -693,9 +812,11 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
         )
 
         if not model_available(MODEL):
+
             self.installation_error(
                 "Le modèle Upeelechien n'a pas été créé."
             )
+
             return
 
         self.update_loading(
@@ -715,8 +836,6 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
 
         def show():
 
-            self.loading_target = self.loading_value
-
             self.status_label.set_text(
                 "Installation impossible"
             )
@@ -729,6 +848,9 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
                 "Erreur"
             )
 
+            if self.loading_spinner:
+                self.loading_spinner.set_spinning(False)
+
             return False
 
         GLib.idle_add(show)
@@ -740,16 +862,23 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
 
     def show_chat(self):
 
-        if self.loading_timer is not None:
+        if self.loading_animation_timer:
             GLib.source_remove(
-                self.loading_timer
+                self.loading_animation_timer
             )
-            self.loading_timer = None
+
+            self.loading_animation_timer = None
 
         while self.main.get_first_child():
             self.main.remove(
                 self.main.get_first_child()
             )
+
+        page = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL
+        )
+
+        page.add_css_class("chat-background")
 
         header = Gtk.HeaderBar()
 
@@ -759,21 +888,18 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
 
         header.set_title_widget(title)
 
-        self.main.append(header)
+        page.append(header)
 
         self.messages_box = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
-            spacing=8
-        )
-
-        self.messages_box.set_vexpand(True)
-        self.messages_box.set_valign(
-            Gtk.Align.START
+            spacing=6
         )
 
         self.messages_box.add_css_class(
-            "chat-area"
+            "messages-area"
         )
+
+        self.messages_box.set_vexpand(True)
 
         self.scrolled = Gtk.ScrolledWindow()
         self.scrolled.set_vexpand(True)
@@ -782,24 +908,23 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
             self.messages_box
         )
 
-        self.main.append(
-            self.scrolled
-        )
+        page.append(self.scrolled)
 
         bottom = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=8
         )
 
-        bottom.set_margin_top(8)
-        bottom.set_margin_bottom(8)
-        bottom.set_margin_start(8)
-        bottom.set_margin_end(8)
+        bottom.add_css_class(
+            "input-area"
+        )
 
         self.entry = Gtk.Entry()
+
         self.entry.set_placeholder_text(
             "Écrivez votre message..."
         )
+
         self.entry.set_hexpand(True)
 
         self.entry.connect(
@@ -823,7 +948,9 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
         bottom.append(self.entry)
         bottom.append(send)
 
-        self.main.append(bottom)
+        page.append(bottom)
+
+        self.main.append(page)
 
         self.write_chat(
             "Upeelechien",
@@ -831,43 +958,18 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
             "une IA française développée par Marin."
         )
 
-        self.scroll_to_bottom()
-
         return False
 
 
-    def scroll_to_bottom(self):
-
-        def scroll():
-
-            if not hasattr(self, "scrolled"):
-                return False
-
-            adjustment = (
-                self.scrolled.get_vadjustment()
-            )
-
-            adjustment.set_value(
-                adjustment.get_upper()
-                - adjustment.get_page_size()
-            )
-
-            return False
-
-        GLib.idle_add(scroll)
-
+    # ========================================================
+    # BULLES
+    # ========================================================
 
     def write_chat(
         self,
         speaker,
         message
     ):
-
-        if not hasattr(
-            self,
-            "messages_box"
-        ):
-            return
 
         row = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL
@@ -882,16 +984,22 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
 
         bubble.set_margin_top(4)
         bubble.set_margin_bottom(4)
-        bubble.set_margin_start(8)
-        bubble.set_margin_end(8)
+        bubble.set_margin_start(4)
+        bubble.set_margin_end(4)
 
-        bubble.add_css_class(
-            "bubble"
+        bubble.set_halign(
+            Gtk.Align.START
+            if speaker != "Vous"
+            else Gtk.Align.END
         )
 
         name = Gtk.Label(
             label=speaker,
             xalign=0
+        )
+
+        name.add_css_class(
+            "bubble-name"
         )
 
         text = Gtk.Label(
@@ -903,21 +1011,22 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
         text.set_wrap_mode(
             Gtk.WrapMode.WORD_CHAR
         )
+
         text.set_selectable(True)
-        text.set_max_width_chars(65)
+
+        text.set_max_width_chars(70)
+
+        text.add_css_class(
+            "message-text"
+        )
+
+        bubble.append(name)
+        bubble.append(text)
 
         if speaker == "Vous":
 
             bubble.add_css_class(
                 "user-bubble"
-            )
-
-            name.add_css_class(
-                "bubble-user-name"
-            )
-
-            text.add_css_class(
-                "message-text"
             )
 
             row.set_halign(
@@ -930,35 +1039,61 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
                 "assistant-bubble"
             )
 
-            name.add_css_class(
-                "bubble-assistant-name"
-            )
-
-            text.add_css_class(
-                "message-text"
-            )
-
             row.set_halign(
                 Gtk.Align.START
             )
 
-        bubble.append(name)
-        bubble.append(text)
-
         row.append(bubble)
 
-        self.messages_box.append(row)
+        self.messages_box.append(
+            row
+        )
 
         self.scroll_to_bottom()
 
 
     # ========================================================
-    # ANIMATION "L'IA ÉCRIT"
+    # SCROLL
+    # ========================================================
+
+    def scroll_to_bottom(self):
+
+        def scroll():
+
+            if not hasattr(
+                self,
+                "scrolled"
+            ):
+                return False
+
+            adjustment = (
+                self.scrolled
+                .get_vadjustment()
+            )
+
+            adjustment.set_value(
+                max(
+                    0,
+                    adjustment.get_upper()
+                    - adjustment.get_page_size()
+                )
+            )
+
+            return False
+
+        GLib.idle_add(scroll)
+
+
+    # ========================================================
+    # INDICATEUR DE GENERATION
     # ========================================================
 
     def show_typing(self):
 
-        if self.typing_row is not None:
+        if hasattr(
+            self,
+            "typing_row"
+        ):
             return
 
         self.typing_row = Gtk.Box(
@@ -978,7 +1113,7 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
         )
 
         self.typing_label = Gtk.Label(
-            label="Upeelechien écrit"
+            label="Upeelechien écrit..."
         )
 
         self.typing_label.add_css_class(
@@ -1009,7 +1144,10 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
 
     def animate_typing(self):
 
-        if self.typing_label is None:
+        if not hasattr(
+            self,
+            "typing_label"
+        ):
             return False
 
         self.typing_dots = (
@@ -1027,7 +1165,7 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
 
     def hide_typing(self):
 
-        if self.typing_timer is not None:
+        if self.typing_timer:
 
             GLib.source_remove(
                 self.typing_timer
@@ -1035,15 +1173,23 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
 
             self.typing_timer = None
 
-        if self.typing_row is not None:
+        if hasattr(
+            self,
+            "typing_row"
+        ):
 
             self.messages_box.remove(
                 self.typing_row
             )
 
-            self.typing_row = None
+            del self.typing_row
 
-        self.typing_label = None
+        if hasattr(
+            self,
+            "typing_label"
+        ):
+
+            del self.typing_label
 
 
     # ========================================================
@@ -1064,6 +1210,9 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
             prompt
         )
 
+        self.response_buffer = ""
+        self.current_ai_label = None
+
         self.show_typing()
 
         threading.Thread(
@@ -1074,7 +1223,7 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
 
 
     # ========================================================
-    # OLLAMA GENERATE
+    # STREAMING OLLAMA
     # ========================================================
 
     def ask_ollama(self, prompt):
@@ -1082,7 +1231,7 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
         payload = json.dumps({
             "model": MODEL,
             "prompt": prompt,
-            "stream": False,
+            "stream": True,
             "think": False
         }).encode()
 
@@ -1098,42 +1247,205 @@ class UpeelechienWindow(Gtk.ApplicationWindow):
 
             with urllib.request.urlopen(
                 request,
-                timeout=120
+                timeout=300
             ) as response:
 
-                data = json.loads(
-                    response.read().decode()
-                )
+                first_chunk = True
 
-            answer = data.get(
-                "response",
-                "Aucune réponse."
-            )
+                for raw_line in response:
+
+                    if not raw_line:
+                        continue
+
+                    try:
+                        data = json.loads(
+                            raw_line.decode().strip()
+                        )
+                    except Exception:
+                        continue
+
+                    chunk = data.get(
+                        "response",
+                        ""
+                    )
+
+                    if chunk:
+
+                        if first_chunk:
+
+                            first_chunk = False
+
+                            GLib.idle_add(
+                                self.begin_streaming_response
+                            )
+
+                        GLib.idle_add(
+                            self.append_stream_chunk,
+                            chunk
+                        )
+
+                    if data.get(
+                        "done",
+                        False
+                    ):
+                        break
+
+                GLib.idle_add(
+                    self.finish_streaming_response
+                )
 
         except urllib.error.URLError:
 
-            answer = (
+            GLib.idle_add(
+                self.stream_error,
                 "Erreur : impossible de contacter Ollama."
             )
 
         except Exception as error:
 
-            answer = f"Erreur : {error}"
+            GLib.idle_add(
+                self.stream_error,
+                f"Erreur : {error}"
+            )
 
-        GLib.idle_add(
-            self.finish_response,
-            answer
+
+    # ========================================================
+    # PREMIER MORCEAU
+    # ========================================================
+
+    def begin_streaming_response(self):
+
+        self.hide_typing()
+
+        self.current_ai_label = Gtk.Label(
+            label="",
+            xalign=0
         )
 
+        self.current_ai_label.set_wrap(True)
 
-    def finish_response(self, answer):
+        self.current_ai_label.set_wrap_mode(
+            Gtk.WrapMode.WORD_CHAR
+        )
+
+        self.current_ai_label.set_selectable(True)
+
+        self.current_ai_label.set_max_width_chars(
+            70
+        )
+
+        self.current_ai_label.add_css_class(
+            "message-text"
+        )
+
+        bubble = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=3
+        )
+
+        bubble.set_margin_top(4)
+        bubble.set_margin_bottom(4)
+        bubble.set_margin_start(4)
+        bubble.set_margin_end(4)
+
+        bubble.add_css_class(
+            "assistant-bubble"
+        )
+
+        name = Gtk.Label(
+            label="Upeelechien",
+            xalign=0
+        )
+
+        name.add_css_class(
+            "bubble-name"
+        )
+
+        bubble.append(name)
+
+        bubble.append(
+            self.current_ai_label
+        )
+
+        row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL
+        )
+
+        row.set_halign(
+            Gtk.Align.START
+        )
+
+        row.append(
+            bubble
+        )
+
+        self.messages_box.append(
+            row
+        )
+
+        self.current_ai_bubble = row
+
+        self.scroll_to_bottom()
+
+        return False
+
+
+    # ========================================================
+    # AFFICHAGE PROGRESSIF
+    # ========================================================
+
+    def append_stream_chunk(self, chunk):
+
+        if not self.current_ai_label:
+            return False
+
+        self.response_buffer += chunk
+
+        self.current_ai_label.set_text(
+            self.response_buffer
+        )
+
+        self.scroll_to_bottom()
+
+        return False
+
+
+    # ========================================================
+    # FIN STREAMING
+    # ========================================================
+
+    def finish_streaming_response(self):
+
+        self.hide_typing()
+
+        if (
+            self.current_ai_label
+            and not self.response_buffer
+        ):
+
+            self.current_ai_label.set_text(
+                "Aucune réponse."
+            )
+
+        self.current_ai_label = None
+        self.current_ai_bubble = None
+
+        self.scroll_to_bottom()
+
+        return False
+
+
+    def stream_error(self, message):
 
         self.hide_typing()
 
         self.write_chat(
             "Upeelechien",
-            answer
+            message
         )
+
+        self.current_ai_label = None
+        self.current_ai_bubble = None
 
         return False
 
@@ -1152,7 +1464,9 @@ class UpeelechienApplication(Gtk.Application):
 
     def do_activate(self):
 
-        window = UpeelechienWindow(self)
+        window = UpeelechienWindow(
+            self
+        )
 
         window.present()
 
